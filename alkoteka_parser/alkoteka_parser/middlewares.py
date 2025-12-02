@@ -11,7 +11,7 @@ from itemadapter import ItemAdapter
 
 
 class AlkotekaParserRegionMiddleware:
-    """Класс для парсинга по указанному региону"""
+    """Класс для парсинга по указанному региону."""
     def __init__(self, region_id):
         self.region_id = region_id
 
@@ -26,7 +26,7 @@ class AlkotekaParserRegionMiddleware:
 
 
 class AlkotekaParserProxyMiddleware:
-    """Класс со списком прокси"""
+    """Класс со списком прокси."""
     def __init__(self, proxy_list):
         self.proxy_list = proxy_list
 
