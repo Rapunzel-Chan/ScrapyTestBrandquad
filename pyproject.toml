@@ -1,0 +1,28 @@
+[project]
+name = "scrapytestbrandquad"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "RapunzelChan",email = "rapuncel.chan24@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "scrapy (>=2.13.4,<3.0.0)",
+    "python-dotenv (>=1.2.1,<2.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+lintblack = [
+    "flake8 (>=7.3.0,<8.0.0)",
+    "mypy (>=1.19.0,<2.0.0)",
+    "isort (>=7.0.0,<8.0.0)"
+]
+dev = [
+    "pytest (>=9.0.1,<10.0.0)"
+]
