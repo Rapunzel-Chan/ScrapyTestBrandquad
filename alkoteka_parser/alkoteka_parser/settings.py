@@ -6,27 +6,35 @@
 #     https://docs.scrapy.org/en/latest/topics/settings.html
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 BOT_NAME = "alkoteka_parser"
 
 SPIDER_MODULES = ["alkoteka_parser.spiders"]
 NEWSPIDER_MODULE = "alkoteka_parser.spiders"
-
+REGION_ID = os.getenv("REGION_ID")
 ADDONS = {}
 
+PROXY_LIST =[proxy.strip() for proxy in os.getenv("PROXY_LIST", "").split(",") if proxy.strip()]
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-              "Chrome/108.0.0.0 Safari/537.36")
+USER_AGENT = os.getenv("USER_AGENT")
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = False #отключен для проверки тестового
 
 # Concurrency and throttling settings
 #CONCURRENT_REQUESTS = 16
-CONCURRENT_REQUESTS_PER_DOMAIN = 1
-DOWNLOAD_DELAY = 1
+CONCURRENT_REQUESTS_PER_DOMAIN = int(os.getenv('CONCURRENT_REQUESTS_PER_DOMAIN', 1))
+DOWNLOAD_DELAY = float(os.getenv('DOWNLOAD_DELAY', 1))
 RANDOMIZE_DOWNLOAD_DELAY = False
+
+RETRY_TIMES = 3
+RETRY_HTTP_CODES = [500, 502, 503, 504, 408, 429]
+DOWNLOAD_TIMEOUT = 15
 
 # Disable cookies (enabled by default)
 #COOKIES_ENABLED = False
@@ -51,6 +59,7 @@ RANDOMIZE_DOWNLOAD_DELAY = False
 DOWNLOADER_MIDDLEWARES = {
     "alkoteka_parser.middlewares.AlkotekaParserRegionMiddleware": 543,
     "alkoteka_parser.middlewares.AlkotekaParserProxyMiddleware": 544,
+    "scrapy.downloadermiddlewares.retry.RetryMiddleware": 550,
 }
 
 # Enable or disable extensions
