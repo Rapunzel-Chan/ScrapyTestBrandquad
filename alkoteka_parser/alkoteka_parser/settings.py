@@ -16,15 +16,17 @@ ADDONS = {}
 
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = "alkoteka_parser (+http://www.yourdomain.com)"
+USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/108.0.0.0 Safari/537.36")
 
 # Obey robots.txt rules
-ROBOTSTXT_OBEY = True
+ROBOTSTXT_OBEY = False #отключен для проверки тестового
 
 # Concurrency and throttling settings
 #CONCURRENT_REQUESTS = 16
 CONCURRENT_REQUESTS_PER_DOMAIN = 1
 DOWNLOAD_DELAY = 1
+RANDOMIZE_DOWNLOAD_DELAY = False
 
 # Disable cookies (enabled by default)
 #COOKIES_ENABLED = False
@@ -46,9 +48,10 @@ DOWNLOAD_DELAY = 1
 
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
-#DOWNLOADER_MIDDLEWARES = {
-#    "alkoteka_parser.middlewares.AlkotekaParserDownloaderMiddleware": 543,
-#}
+DOWNLOADER_MIDDLEWARES = {
+    "alkoteka_parser.middlewares.AlkotekaParserRegionMiddleware": 543,
+    "alkoteka_parser.middlewares.AlkotekaParserProxyMiddleware": 544,
+}
 
 # Enable or disable extensions
 # See https://docs.scrapy.org/en/latest/topics/extensions.html
@@ -58,9 +61,9 @@ DOWNLOAD_DELAY = 1
 
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-#ITEM_PIPELINES = {
-#    "alkoteka_parser.pipelines.AlkotekaParserPipeline": 300,
-#}
+ITEM_PIPELINES = {
+    "alkoteka_parser.pipelines.JsonWriterPipeline": 300,
+}
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
