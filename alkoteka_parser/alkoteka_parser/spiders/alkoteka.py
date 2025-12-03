@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 from alkoteka_parser.items import ProductItem
 from scrapy.utils.project import get_project_settings
+from alkoteka_parser.utils.categories import extract_slug
 
 class AlkotekaSpider(scrapy.Spider):
     name = "alkoteka"
@@ -13,11 +14,12 @@ class AlkotekaSpider(scrapy.Spider):
     city_uuid = settings.get('CITY_UUID')
     start_urls = []
 
-    # Формируем start_urls из категорий
+    # формируем start_urls с учетом категорий
     for url in settings.get('START_URLS', []):
-        slug = url.rstrip('/').split('/')[-1]
-        api_url = f"https://alkoteka.com/web-api/v1/product?city_uuid={city_uuid}&page=1&per_page=20&root_category_slug={slug}"
-        start_urls.append(api_url)
+        slug = extract_slug(url)
+        if slug:
+            api_url = f"https://alkoteka.com/web-api/v1/product?city_uuid={city_uuid}&page=1&per_page=20&root_category_slug={slug}"
+            start_urls.append(api_url)
 
     custom_settings = {
         'FEEDS': {
@@ -26,7 +28,13 @@ class AlkotekaSpider(scrapy.Spider):
     }
 
     def parse(self, response):
-        data = json.loads(response.text)
+        try:
+            data = json.loads(response.text)
+        except Exception:
+            # если API не ответил или прокси упал, просто пропускаем
+            self.logger.warning(f"Не удалось получить данные по URL: {response.url}, пропускаем")
+            return
+
         results = data.get('results', [])
         meta = data.get('meta', {})
 
@@ -45,7 +53,12 @@ class AlkotekaSpider(scrapy.Spider):
             yield scrapy.Request(next_url, callback=self.parse)
 
     def parse_product(self, response):
-        data = json.loads(response.text)
+        try:
+            data = json.loads(response.text)
+        except Exception:
+            self.logger.warning(f"Не удалось получить данные по товару: {response.url}")
+            return
+
         product = data.get('results', {})
         if not product:
             return
@@ -111,7 +124,7 @@ class AlkotekaSpider(scrapy.Spider):
                     'volume': block.get('min'),
                     'strength': next((b.get('min') for b in product.get('description_blocks', []) if b.get('code')=='krepost'), None)
                 })
-        item['variants'] = variants if variants else []
+        item['variants'] = len(variants)  # исправлено под тестовое задание
 
         item['marketing_tags'] = [label.get('title') for label in product.get('action_labels', [])]
         item['datetime'] = datetime.utcfromtimestamp(item['timestamp']).strftime('%Y-%m-%d %H:%M:%S')

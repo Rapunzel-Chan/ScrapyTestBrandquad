@@ -2,6 +2,9 @@ import scrapy
 import json
 
 class AlkotekaLinksSpider(scrapy.Spider):
+    """
+    Выгружает в products.json наименования и url продуктов
+    """
     name = 'alkoteka_links'
     allowed_domains = ['alkoteka.com']
 
