@@ -3,22 +3,25 @@ import json
 import time
 from datetime import datetime
 from alkoteka_parser.items import ProductItem
+from scrapy.utils.project import get_project_settings
 
 class AlkotekaSpider(scrapy.Spider):
     name = "alkoteka"
     allowed_domains = ["alkoteka.com"]
 
-    start_urls = [
-        # Категория слабоалкогольных напитков
-        'https://alkoteka.com/web-api/v1/product?city_uuid=4a70f9e0-46ae-11e7-83ff-00155d026416&page=1&per_page=20&root_category_slug=slaboalkogolnye-napitki-2'
-    ]
+    settings = get_project_settings()
+    city_uuid = settings.get('CITY_UUID')
+    start_urls = []
+
+    # Формируем start_urls из категорий
+    for url in settings.get('START_URLS', []):
+        slug = url.rstrip('/').split('/')[-1]
+        api_url = f"https://alkoteka.com/web-api/v1/product?city_uuid={city_uuid}&page=1&per_page=20&root_category_slug={slug}"
+        start_urls.append(api_url)
 
     custom_settings = {
         'FEEDS': {
             'products.json': {'format': 'json', 'encoding': 'utf8'}
-        },
-        'DOWNLOADER_MIDDLEWARES': {
-            'alkoteka_parser.middlewares.RegionMiddleware': 543,
         }
     }
 
@@ -27,15 +30,13 @@ class AlkotekaSpider(scrapy.Spider):
         results = data.get('results', [])
         meta = data.get('meta', {})
 
-        # Перебираем товары на странице
         for product in results:
             product_slug = product.get('slug')
             if not product_slug:
                 continue
-            product_url = f"https://alkoteka.com/web-api/v1/product/{product_slug}?city_uuid=4a70f9e0-46ae-11e7-83ff-00155d026416"
+            product_url = f"https://alkoteka.com/web-api/v1/product/{product_slug}?city_uuid={self.city_uuid}"
             yield scrapy.Request(product_url, callback=self.parse_product)
 
-        # Пагинация
         current_page = meta.get('current_page', 1)
         has_more = meta.get('has_more_pages', False)
         if has_more:
@@ -53,7 +54,6 @@ class AlkotekaSpider(scrapy.Spider):
         item['timestamp'] = int(time.time())
         item['datetime'] = datetime.utcfromtimestamp(item['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
 
-        # Основные поля
         item['RPC'] = product.get('vendor_code')
         item['url'] = response.url
         item['title'] = product.get('name')
@@ -63,7 +63,6 @@ class AlkotekaSpider(scrapy.Spider):
             product.get('category', {}).get('name', '')
         ]
 
-        # Цена
         current_price = product.get('price') or 0
         prev_price = product.get('prev_price') or current_price
         sale_tag = ''
@@ -76,14 +75,12 @@ class AlkotekaSpider(scrapy.Spider):
             'sale_tag': sale_tag
         }
 
-        # Наличие
         total_quantity = product.get('quantity_total') or 0
         item['stock'] = {
             'in_stock': product.get('available', False),
             'count': total_quantity
         }
 
-        # Assets
         main_image = product.get('image_url')
         item['assets'] = {
             'main_image': main_image,
@@ -92,7 +89,6 @@ class AlkotekaSpider(scrapy.Spider):
             'video': []
         }
 
-        # Метаданные (характеристики)
         metadata = {}
         metadata['Артикул'] = product.get('vendor_code')
         for block in product.get('description_blocks', []):
@@ -102,13 +98,12 @@ class AlkotekaSpider(scrapy.Spider):
                     metadata[block.get('title')] = ', '.join([v.get('name') for v in block.get('values')])
                 else:
                     metadata[block.get('title')] = f"{block.get('min', '')}-{block.get('max', '')} {block.get('unit', '')}".strip()
-        # Дополнительно описание
+
         text_blocks = product.get('text_blocks', [])
         if text_blocks:
             metadata['Описание'] = ' '.join([tb.get('content', '') for tb in text_blocks])
         item['metadata'] = metadata
 
-        # Варианты
         variants = []
         for block in product.get('description_blocks', []):
             if block.get('code') in ['obem', 'krepost']:
@@ -118,10 +113,7 @@ class AlkotekaSpider(scrapy.Spider):
                 })
         item['variants'] = variants if variants else []
 
-        # Маркетинговые теги
         item['marketing_tags'] = [label.get('title') for label in product.get('action_labels', [])]
-
-        # Дата и время в человекочитаемом формате
         item['datetime'] = datetime.utcfromtimestamp(item['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
 
         yield item
