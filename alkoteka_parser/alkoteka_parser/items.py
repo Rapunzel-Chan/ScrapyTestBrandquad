@@ -10,8 +10,8 @@ class ProductItem(scrapy.Item):
     brand = scrapy.Field()
     section = scrapy.Field()  # иерархия категорий
     price_data = scrapy.Field()  # dict: current, original, sale_tag
-    stock = scrapy.Field()       # dict: in_stock, count
-    assets = scrapy.Field()      # dict: main_image, set_images, view360, video
-    metadata = scrapy.Field()    # dict: характеристики
-    variants = scrapy.Field()    # int
+    stock = scrapy.Field()  # dict: in_stock, count
+    assets = scrapy.Field()  # dict: main_image, set_images, view360, video
+    metadata = scrapy.Field()  # dict: характеристики
+    variants = scrapy.Field()  # int
     datetime = scrapy.Field()

@@ -1,33 +1,33 @@
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_NAME = 'alkoteka_parser'
+BOT_NAME = "alkoteka_parser"
 
-SPIDER_MODULES = ['alkoteka_parser.spiders']
-NEWSPIDER_MODULE = 'alkoteka_parser.spiders'
+SPIDER_MODULES = ["alkoteka_parser.spiders"]
+NEWSPIDER_MODULE = "alkoteka_parser.spiders"
 
-USER_AGENT = os.getenv("USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-ROBOTSTXT_OBEY = False #выключен на время тестового
+USER_AGENT = os.getenv(
+    "USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+)
+ROBOTSTXT_OBEY = False  # выключен на время тестового
 
 CITY_NAME = os.getenv("CITY_NAME", "Краснодар")
 CITY_UUID = os.getenv("CITY_UUID", "4a70f9e0-46ae-11e7-83ff-00155d026416")
 
-START_URLS = [
-    url.strip()
-    for url in os.getenv("START_URLS", "").split(",")
-    if url.strip()
-]
+START_URLS = [url.strip() for url in os.getenv("START_URLS", "").split(",") if url.strip()]
 
 DOWNLOADER_MIDDLEWARES = {
-    'alkoteka_parser.middlewares.RegionMiddleware': 543,
-    'alkoteka_parser.middlewares.ProxyMiddleware': 544,
-    'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,
+    "alkoteka_parser.middlewares.RegionMiddleware": 543,
+    "alkoteka_parser.middlewares.ProxyMiddleware": 544,
+    "scrapy.downloadermiddlewares.useragent.UserAgentMiddleware": None,
 }
 
-FEED_EXPORT_ENCODING = 'utf-8'
-LOG_LEVEL = 'INFO'
+FEED_EXPORT_ENCODING = "utf-8"
+LOG_LEVEL = "INFO"
 PROXIES = os.getenv("PROXIES", "").split(",")
 
 CONCURRENT_REQUESTS = 4
