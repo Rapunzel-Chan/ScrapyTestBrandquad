@@ -14,3 +14,4 @@ class ProductItem(scrapy.Item):
     assets = scrapy.Field()      # dict: main_image, set_images, view360, video
     metadata = scrapy.Field()    # dict: характеристики
     variants = scrapy.Field()    # int
+    datetime = scrapy.Field()

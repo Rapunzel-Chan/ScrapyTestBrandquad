@@ -1,17 +1,15 @@
 import scrapy
 import json
 import time
-import re
 from datetime import datetime
 from alkoteka_parser.items import ProductItem
 
+class AlkotekaSpider(scrapy.Spider):
+    name = "alkoteka"
+    allowed_domains = ["alkoteka.com"]
 
-class AlkotekaProductsSpider(scrapy.Spider):
-    name = 'alkoteka'
-    allowed_domains = ['alkoteka.com']
-
-    # Список ссылок на категории
     start_urls = [
+        # Категория слабоалкогольных напитков
         'https://alkoteka.com/web-api/v1/product?city_uuid=4a70f9e0-46ae-11e7-83ff-00155d026416&page=1&per_page=20&root_category_slug=slaboalkogolnye-napitki-2'
     ]
 
@@ -27,13 +25,17 @@ class AlkotekaProductsSpider(scrapy.Spider):
     def parse(self, response):
         data = json.loads(response.text)
         results = data.get('results', [])
+        meta = data.get('meta', {})
 
+        # Перебираем товары на странице
         for product in results:
-            product_url = response.urljoin(product.get('product_url'))
+            product_slug = product.get('slug')
+            if not product_slug:
+                continue
+            product_url = f"https://alkoteka.com/web-api/v1/product/{product_slug}?city_uuid=4a70f9e0-46ae-11e7-83ff-00155d026416"
             yield scrapy.Request(product_url, callback=self.parse_product)
 
         # Пагинация
-        meta = data.get('meta', {})
         current_page = meta.get('current_page', 1)
         has_more = meta.get('has_more_pages', False)
         if has_more:
@@ -42,76 +44,84 @@ class AlkotekaProductsSpider(scrapy.Spider):
             yield scrapy.Request(next_url, callback=self.parse)
 
     def parse_product(self, response):
+        data = json.loads(response.text)
+        product = data.get('results', {})
+        if not product:
+            return
+
         item = ProductItem()
         item['timestamp'] = int(time.time())
+        item['datetime'] = datetime.utcfromtimestamp(item['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
 
-        # RPC (артикул)
-        rpc = response.css('.product-card__header p::text').re_first(r'\d+')
-        item['RPC'] = rpc if rpc else ''
-
+        # Основные поля
+        item['RPC'] = product.get('vendor_code')
         item['url'] = response.url
+        item['title'] = product.get('name')
+        item['brand'] = ''
+        item['section'] = [
+            product.get('category', {}).get('parent', {}).get('name', ''),
+            product.get('category', {}).get('name', '')
+        ]
 
-        # Название товара
-        title = response.css('h1::text').get()
-        volume = response.css('.product-card__tags button p::text').re_first(r'\d+\.?\d*\s*[лL]')
-        if volume:
-            title = f"{title}, {volume}"
-        item['title'] = title
-
-        # Marketing tags
-        item['marketing_tags'] = response.css('.product-card__tags button p::text').getall()
-
-        # Brand
-        item['brand'] = response.css('.specifications-card:contains("Бренд") p::text').get(default='').strip()
-
-        # Section (категории)
-        item['section'] = response.css('.breadcrumbs__item span::text').getall()
-
-        # Price data
-        current_price_text = response.css('.cart-card__sale-price .text--body-bold::text').re_first(r'\d+')
-        original_price_text = response.css('.cart-card__sale-price .text--tag::text').re_first(r'\d+')
-        current_price = float(current_price_text) if current_price_text else 0
-        original_price = float(original_price_text) if original_price_text else current_price
+        # Цена
+        current_price = product.get('price') or 0
+        prev_price = product.get('prev_price') or current_price
         sale_tag = ''
-        if original_price > current_price:
-            discount = round((original_price - current_price) / original_price * 100)
+        if prev_price > current_price:
+            discount = round((prev_price - current_price) / prev_price * 100)
             sale_tag = f"Скидка {discount}%"
         item['price_data'] = {
             'current': current_price,
-            'original': original_price,
+            'original': prev_price,
             'sale_tag': sale_tag
         }
 
-        # Stock
-        in_stock_text = response.css('.product-card__interactives-anchor a::text').re_first(r'\d+')
-        in_stock = int(in_stock_text) > 0 if in_stock_text else False
+        # Наличие
+        total_quantity = product.get('quantity_total') or 0
         item['stock'] = {
-            'in_stock': in_stock,
-            'count': int(in_stock_text) if in_stock_text else 0
+            'in_stock': product.get('available', False),
+            'count': total_quantity
         }
 
         # Assets
-        main_image = response.css('.product-info__hero-img-wrap img::attr(src)').get()
-        set_images = response.css('.product-info__hero-img-wrap img::attr(src)').getall()
+        main_image = product.get('image_url')
         item['assets'] = {
             'main_image': main_image,
-            'set_images': set_images,
+            'set_images': [main_image] if main_image else [],
             'view360': [],
             'video': []
         }
 
-        # Metadata
+        # Метаданные (характеристики)
         metadata = {}
-        metadata['__description'] = response.css('.product-info__description-text::text').get(default='').strip()
-        for spec in response.css('.specifications-card'):
-            key = spec.css('span::text').get()
-            value = spec.css('p::text').get()
-            if key and value:
-                metadata[key.strip()] = value.strip()
-        metadata['Артикул'] = rpc
+        metadata['Артикул'] = product.get('vendor_code')
+        for block in product.get('description_blocks', []):
+            code = block.get('code')
+            if code:
+                if block.get('type') == 'select' and block.get('values'):
+                    metadata[block.get('title')] = ', '.join([v.get('name') for v in block.get('values')])
+                else:
+                    metadata[block.get('title')] = f"{block.get('min', '')}-{block.get('max', '')} {block.get('unit', '')}".strip()
+        # Дополнительно описание
+        text_blocks = product.get('text_blocks', [])
+        if text_blocks:
+            metadata['Описание'] = ' '.join([tb.get('content', '') for tb in text_blocks])
         item['metadata'] = metadata
 
-        # Variants
-        item['variants'] = len(response.css('.product-card__tags button p::text').re(r'\d+\.?\d*\s*[лL]'))
+        # Варианты
+        variants = []
+        for block in product.get('description_blocks', []):
+            if block.get('code') in ['obem', 'krepost']:
+                variants.append({
+                    'volume': block.get('min'),
+                    'strength': next((b.get('min') for b in product.get('description_blocks', []) if b.get('code')=='krepost'), None)
+                })
+        item['variants'] = variants if variants else []
+
+        # Маркетинговые теги
+        item['marketing_tags'] = [label.get('title') for label in product.get('action_labels', [])]
+
+        # Дата и время в человекочитаемом формате
+        item['datetime'] = datetime.utcfromtimestamp(item['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
 
         yield item
