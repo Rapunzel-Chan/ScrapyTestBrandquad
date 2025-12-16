@@ -18,21 +18,37 @@ class AlkotekaSpider(scrapy.Spider):
     name = "alkoteka"
     allowed_domains = ["alkoteka.com"]
 
-    custom_settings = {"FEEDS": {"products.json": {"format": "json", "encoding": "utf8"}}}
+    custom_settings = {
+        "FEEDS": {
+            "products.json": {
+                "format": "json",
+                "encoding": "utf8",
+            }
+        }
+    }
 
     def start_requests(self):
         settings = get_project_settings()
-        city_uuid = settings.get("CITY_UUID")
-        self.city_uuid = city_uuid
+        self.city_uuid = settings.get("CITY_UUID")
 
         for category_url in START_URLS:
-            slug = extract_slug(category_url)
-            if slug:
-                api_url = (
-                    f"https://alkoteka.com/web-api/v1/product?city_uuid="
-                    f"{city_uuid}&page=1&per_page=20&root_category_slug={slug}"
-                )
-                yield scrapy.Request(api_url, callback=self.parse)
+            category_slug = extract_slug(category_url)
+            if not category_slug:
+                continue
+
+            api_url = (
+                "https://alkoteka.com/web-api/v1/product"
+                f"?city_uuid={self.city_uuid}"
+                "&page=1"
+                "&per_page=20"
+                f"&root_category_slug={category_slug}"
+            )
+
+            yield scrapy.Request(
+                api_url,
+                callback=self.parse,
+                meta={"category_slug": category_slug},
+            )
 
     def parse(self, response):
         try:
@@ -43,43 +59,60 @@ class AlkotekaSpider(scrapy.Spider):
 
         results = data.get("results", [])
         meta = data.get("meta", {})
+        category_slug = response.meta.get("category_slug")
 
         for product in results:
             product_slug = product.get("slug")
             if not product_slug:
                 continue
-            product_url = f"https://alkoteka.com/web-api/v1/product/{product_slug}?city_uuid={self.city_uuid}"
+
+            product_url = f"https://alkoteka.com/web-api/v1/product/" f"{product_slug}?city_uuid={self.city_uuid}"
+
             yield scrapy.Request(
                 product_url,
                 callback=self.parse_product,
-                meta={"product_slug": product_slug},
+                meta={
+                    "product_slug": product_slug,
+                    "category_slug": category_slug,
+                },
             )
 
         current_page = meta.get("current_page", 1)
         has_more = meta.get("has_more_pages", False)
+
         if has_more:
             next_page = current_page + 1
-            next_url = response.url.replace(f"page={current_page}", f"page={next_page}")
-            yield scrapy.Request(next_url, callback=self.parse)
+            next_url = response.url.replace(
+                f"page={current_page}",
+                f"page={next_page}",
+            )
+            yield scrapy.Request(
+                next_url,
+                callback=self.parse,
+                meta=response.meta,
+            )
 
     def parse_product(self, response):
         product_slug = response.meta.get("product_slug")
+        category_slug = response.meta.get("category_slug")
+
         try:
             data = json.loads(response.text)
         except Exception:
             self.logger.warning(f"Не удалось получить данные по товару: {response.url}")
             return
 
-        product = data.get("results", {})
+        product = data.get("results")
         if not product:
             return
 
         item = ProductItem()
-        item["timestamp"] = int(time.time())
-        item["datetime"] = datetime.utcfromtimestamp(item["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
 
+        timestamp = int(time.time())
+        item["timestamp"] = timestamp
+        item["datetime"] = datetime.utcfromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
         item["RPC"] = product.get("vendor_code")
-        item["url"] = f"https://alkoteka.com/product/{product_slug}"
+        item["url"] = f"https://alkoteka.com/product/" f"{category_slug}/{product_slug}"
         item["title"] = product.get("name")
         item["brand"] = ""
         item["section"] = [
@@ -89,14 +122,22 @@ class AlkotekaSpider(scrapy.Spider):
 
         current_price = product.get("price") or 0
         prev_price = product.get("prev_price") or current_price
+
         sale_tag = ""
         if prev_price > current_price:
             discount = round((prev_price - current_price) / prev_price * 100)
             sale_tag = f"Скидка {discount}%"
-        item["price_data"] = {"current": current_price, "original": prev_price, "sale_tag": sale_tag}
 
-        total_quantity = product.get("quantity_total") or 0
-        item["stock"] = {"in_stock": product.get("available", False), "count": total_quantity}
+        item["price_data"] = {
+            "current": current_price,
+            "original": prev_price,
+            "sale_tag": sale_tag,
+        }
+
+        item["stock"] = {
+            "in_stock": product.get("available", False),
+            "count": product.get("quantity_total") or 0,
+        }
 
         main_image = product.get("image_url")
         item["assets"] = {
@@ -106,42 +147,27 @@ class AlkotekaSpider(scrapy.Spider):
             "video": [],
         }
 
-        metadata = {}
-        metadata["Артикул"] = product.get("vendor_code")
+        metadata = {"Артикул": product.get("vendor_code")}
+
         for block in product.get("description_blocks", []):
-            code = block.get("code")
-            if code:
-                if block.get("type") == "select" and block.get("values"):
-                    metadata[block.get("title")] = ", ".join([v.get("name") for v in block.get("values")])
-                else:
-                    metadata[block.get("title")] = (
-                        f"{block.get('min', '')}-{block.get('max', '')} {block.get('unit', '')}".strip()
-                    )
+            title = block.get("title")
+            if not title:
+                continue
+
+            if block.get("type") == "select" and block.get("values"):
+                metadata[title] = ", ".join(v.get("name", "") for v in block.get("values", []))
+            else:
+                value = f"{block.get('min', '')}-{block.get('max', '')} {block.get('unit', '')}".strip()
+                if value:
+                    metadata[title] = value
 
         text_blocks = product.get("text_blocks", [])
         if text_blocks:
-            metadata["Описание"] = " ".join([tb.get("content", "") for tb in text_blocks])
+            metadata["Описание"] = " ".join(tb.get("content", "") for tb in text_blocks)
+
         item["metadata"] = metadata
 
-        variants = []
-        for block in product.get("description_blocks", []):
-            if block.get("code") in ["obem", "krepost"]:
-                variants.append(
-                    {
-                        "volume": block.get("min"),
-                        "strength": next(
-                            (
-                                b.get("min")
-                                for b in product.get("description_blocks", [])
-                                if b.get("code") == "krepost"
-                            ),
-                            None,
-                        ),
-                    }
-                )
-        item["variants"] = len(variants)
-
+        item["variants"] = 0
         item["marketing_tags"] = [label.get("title") for label in product.get("action_labels", [])]
-        item["datetime"] = datetime.utcfromtimestamp(item["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
 
         yield item
