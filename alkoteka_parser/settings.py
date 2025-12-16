@@ -18,8 +18,6 @@ ROBOTSTXT_OBEY = False  # выключен на время тестового
 CITY_NAME = os.getenv("CITY_NAME", "Краснодар")
 CITY_UUID = os.getenv("CITY_UUID", "4a70f9e0-46ae-11e7-83ff-00155d026416")
 
-START_URLS = [url.strip() for url in os.getenv("START_URLS", "").split(",") if url.strip()]
-
 DOWNLOADER_MIDDLEWARES = {
     "alkoteka_parser.middlewares.RegionMiddleware": 543,
     "alkoteka_parser.middlewares.ProxyMiddleware": 544,

@@ -12,13 +12,14 @@ class AlkotekaLinksSpider(scrapy.Spider):
     allowed_domains = ["alkoteka.com"]
 
     start_urls = [
-        "https://alkoteka.com/web-api/v1/product?city_uuid=4a70f9e0-46ae-11e7-83ff-00155d026416&page=1&per_page=20&root_category_slug=slaboalkogolnye-napitki-2"
+        "https://alkoteka.com/web-api/v1/product?city_uuid=4a70f9e0-46ae-11e7-83ff-00155d026416&page"
+        "=1&per_page=20&root_category_slug=slaboalkogolnye-napitki-2"
     ]
 
     custom_settings = {
         "FEEDS": {"products.json": {"format": "json", "encoding": "utf8"}},
         "DOWNLOADER_MIDDLEWARES": {
-            "alkoteka_parser.middlewares.RegionMiddleware": 543,
+            "alkoteka_parser_main.middlewares.RegionMiddleware": 543,
         },
     }
 

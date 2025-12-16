@@ -3,9 +3,11 @@ import time
 from datetime import datetime
 
 import scrapy
-from alkoteka_parser.items import ProductItem
-from alkoteka_parser.utils.categories import extract_slug
 from scrapy.utils.project import get_project_settings
+
+from alkoteka_parser.items import ProductItem
+from alkoteka_parser.start_urls import START_URLS
+from alkoteka_parser.utils.categories import extract_slug
 
 
 class AlkotekaSpider(scrapy.Spider):
@@ -16,17 +18,21 @@ class AlkotekaSpider(scrapy.Spider):
     name = "alkoteka"
     allowed_domains = ["alkoteka.com"]
 
-    settings = get_project_settings()
-    city_uuid = settings.get("CITY_UUID")
-    start_urls = []
-
-    for url in settings.get("START_URLS", []):
-        slug = extract_slug(url)
-        if slug:
-            api_url = f"https://alkoteka.com/web-api/v1/product?city_uuid={city_uuid}&page=1&per_page=20&root_category_slug={slug}"
-            start_urls.append(api_url)
-
     custom_settings = {"FEEDS": {"products.json": {"format": "json", "encoding": "utf8"}}}
+
+    def start_requests(self):
+        settings = get_project_settings()
+        city_uuid = settings.get("CITY_UUID")
+        self.city_uuid = city_uuid
+
+        for category_url in START_URLS:
+            slug = extract_slug(category_url)
+            if slug:
+                api_url = (
+                    f"https://alkoteka.com/web-api/v1/product?city_uuid="
+                    f"{city_uuid}&page=1&per_page=20&root_category_slug={slug}"
+                )
+                yield scrapy.Request(api_url, callback=self.parse)
 
     def parse(self, response):
         try:
@@ -43,7 +49,11 @@ class AlkotekaSpider(scrapy.Spider):
             if not product_slug:
                 continue
             product_url = f"https://alkoteka.com/web-api/v1/product/{product_slug}?city_uuid={self.city_uuid}"
-            yield scrapy.Request(product_url, callback=self.parse_product)
+            yield scrapy.Request(
+                product_url,
+                callback=self.parse_product,
+                meta={"product_slug": product_slug},
+            )
 
         current_page = meta.get("current_page", 1)
         has_more = meta.get("has_more_pages", False)
@@ -53,6 +63,7 @@ class AlkotekaSpider(scrapy.Spider):
             yield scrapy.Request(next_url, callback=self.parse)
 
     def parse_product(self, response):
+        product_slug = response.meta.get("product_slug")
         try:
             data = json.loads(response.text)
         except Exception:
@@ -68,7 +79,7 @@ class AlkotekaSpider(scrapy.Spider):
         item["datetime"] = datetime.utcfromtimestamp(item["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
 
         item["RPC"] = product.get("vendor_code")
-        item["url"] = response.url
+        item["url"] = f"https://alkoteka.com/product/{product_slug}"
         item["title"] = product.get("name")
         item["brand"] = ""
         item["section"] = [
